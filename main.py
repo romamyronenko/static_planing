@@ -1,3 +1,17 @@
+def get_html(arr):
+    res = '<table>'
+    for i in arr:
+        res += '<tr>'
+        for j in i:
+                res += f'<td>{j}</td>'
+        res += '</tr>'
+    res += '</table>'
+
+    template = f"<html><head><link rel='stylesheet' type='text/css' href='style.css'></head><body>{res}</body></html>"
+    with open('index.html', 'w+') as f:
+        f.write(template)
+
+
 matrix = [[None for _ in range(16)] for _ in range(16)]
 matrix[0][4] = 4
 matrix[1][4] = 1
@@ -27,34 +41,118 @@ class Task:
         self._parent_tasks = []
         self._child_tasks = []
         self._proc = None
-    
+
+
     def add_child(self, task, weight, both=True):
         self._child_tasks.append({'task': task, 'weight': weight})
         if both:
             task.add_parent(self, weight)
-    
+
     def add_parent(self, task, weight):
         self._parent_tasks.append({'task': task, 'weight': weight})
-    
+
     def add_proc(self, proc):
         assert self._proc is None, 'Proc exists'
+        self.time *= proc.slowness
         self._proc = proc
-    
+
+    def send_data(self):
+        for i, task in enumerate(self._child_tasks):
+            if task['weight']:
+                self._child_tasks[i]['weight'] -= 1
+                task['task'].get_data(self)
+                break
+
+    def same_proc(self, task):
+        print('ewf')
+        for i, t in enumerate(self._parent_tasks):
+            if task.proc.id == t['task'].proc.id:
+                print('dadwqdwadwqad')
+                self._parent_tasks[i]['weight'] = 0
+
+
+    def get_data(self, task):
+        for i, t in enumerate(self._parent_tasks):
+            if t['task'] is task:
+                self._parent_tasks[i]['weight'] -= 1
+
+    def step(self):
+        self.time -= 1
+
+        if self.is_done:
+            for i, task in enumerate(self._child_tasks):
+                if task['task'].proc.id == self.proc.id:
+                    self._child_tasks[i]['weight'] = 0
+                    task['task'].same_proc(self)
+
+    @property
+    def proc_added(self):
+        return self._proc is not None
+
     @property
     def is_start_task(self):
         return not self._parent_tasks
-    
+
+    @property
+    def is_ready(self):
+        return self.is_start_task or all([i['weight'] == 0 for i in self._parent_tasks])
+
+    @property
+    def is_done(self):
+        return not self.time
+
+    @property
+    def is_finished(self):
+        return self.is_done and all([i['weight'] == 0 for i in self._child_tasks])
+
+    @property
+    def proc(self):
+        return self._proc
+
     def __repr__(self):
         return f'{self.id}|{[i["task"].id for i in self._child_tasks]}|{[i["task"].id for i in self._parent_tasks]}'
 
 
 class Processor:
-    def __init__(self, slowness):
+    def __init__(self, slowness, proc_id):
+        self.id = proc_id
         self.tact = 0
         self.slowness = slowness
+        self._tray = []
+        self._tasks = []
+        self.task_to_do = None
+
+    def step(self):
+        if self._tasks and any([task.is_done and not task.is_finished for task in self._tasks]):
+            task = tuple(filter(lambda task: task.is_done and not task.is_finished, self._tasks))[0]
+            self.send(task)
+            self._tray.append('%6s' % f'({task.id})>{task.proc.id}')
+        elif self._tasks and any([task.is_ready and not task.is_done for task in self._tasks]):
+            for i, task in enumerate(self._tasks):
+                if task.is_ready and not task.is_done:
+                    self._tasks[i].step()
+                    self._tray.append('%6i' % task.id)
+                    break
+        else:
+            self._tray.append('%6s'%' ')
+        self.tact += 1
+
+    def add_task(self, task):
+        self._tasks.append(task)
+        task.add_proc(self)
+
+    def send(self, task):
+        task.send_data()
+
+    def get_tray(self):
+        return self._tray
 
 
-tasks = [Task(j, i) for i, j in enumerate(weights)]
+proc_slownesses = [1, 2, 3, 1]
+procs = [Processor(i, j+1) for j, i in enumerate(proc_slownesses)]
+
+
+tasks = [Task(j, i+1) for i, j in enumerate(weights)]
 for i in range(len(matrix)):
     for j in range(len(matrix)):
         if matrix[i][j] is not None:
@@ -65,3 +163,32 @@ for task in tasks:
     print(task)
 
 
+procs[0].add_task(tasks[1])
+procs[0].add_task(tasks[5])
+procs[0].add_task(tasks[7])
+procs[0].add_task(tasks[10])
+procs[0].add_task(tasks[13])
+procs[1].add_task(tasks[3])
+procs[1].add_task(tasks[11])
+procs[1].add_task(tasks[14])
+procs[1].add_task(tasks[9])
+procs[2].add_task(tasks[0])
+procs[2].add_task(tasks[6])
+procs[3].add_task(tasks[2])
+procs[3].add_task(tasks[4])
+procs[3].add_task(tasks[8])
+procs[3].add_task(tasks[12])
+procs[3].add_task(tasks[15])
+del proc_slownesses
+del weights
+del i
+del j
+del matrix
+while not all([task.is_finished for task in tasks]):
+    for proc in procs:
+        proc.step()
+    ...
+
+for proc in procs:
+    print(f'{proc.id}:'+'|'.join(proc.get_tray()))
+get_html([i.get_tray() for i in procs])
