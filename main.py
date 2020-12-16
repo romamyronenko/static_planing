@@ -1,3 +1,12 @@
+def sort_procs(procs):
+    free = list(filter(lambda a: a.is_free, procs))
+    busy = list(filter(lambda a: not a.is_free, procs))
+    free.sort(key=lambda a: a.slowness)
+    busy.sort(key=lambda a: a.slowness)
+
+    return free + busy
+
+
 def get_html(arr):
     res = '<table>'
     for i in arr:
@@ -79,16 +88,20 @@ class Task:
                 self._parent_tasks[i]['weight'] -= 1
                 if not self._parent_tasks[i]['weight']:
                     self._parent_tasks[i]['finished_time'] = task.proc.tact
-                
 
-    def step(self):
-        self.time -= 1
-
+    def before_step(self):
         if self.is_done:
             for i, task in enumerate(self._child_tasks):
                 if task['task'].proc.id == self.proc.id:
                     self._child_tasks[i]['weight'] = 0
                     task['task'].same_proc(self)
+
+    def step(self):
+        self.time -= 1
+
+    @property
+    def can_be_added(self):
+        return not self.proc_added and any([i['task'].is_done for i in self._parent_tasks])
 
     @property
     def proc_added(self):
@@ -128,6 +141,8 @@ class Processor:
         self.task_to_do = None
 
     def step(self):
+        for task in self._tasks:
+            task.before_step()
         if self._tasks and any([task.is_done and not task.is_finished for task in self._tasks]):
             task = tuple(filter(lambda task: task.is_done and not task.is_finished, self._tasks))[0]
             task_to = self.send(task)
@@ -153,6 +168,10 @@ class Processor:
     def get_tray(self):
         return self._tray
 
+    @property
+    def is_free(self):
+        return not self._tasks
+
 
 proc_slownesses = [1, 2, 3, 1]
 procs = [Processor(i, j + 1) for j, i in enumerate(proc_slownesses)]
@@ -165,34 +184,44 @@ for i in range(len(matrix)):
 
 for task in tasks:
     print(task)
+#
+# procs[0].add_task(tasks[1])
+# procs[0].add_task(tasks[5])
+# procs[0].add_task(tasks[7])
+# procs[0].add_task(tasks[10])
+# procs[0].add_task(tasks[13])
+# procs[1].add_task(tasks[3])
+# procs[1].add_task(tasks[11])
+# procs[1].add_task(tasks[14])
+# procs[1].add_task(tasks[9])
+# procs[2].add_task(tasks[0])
+# procs[2].add_task(tasks[6])
+# procs[3].add_task(tasks[2])
+# procs[3].add_task(tasks[4])
+# procs[3].add_task(tasks[8])
+# procs[3].add_task(tasks[12])
+# procs[3].add_task(tasks[15])
+# del proc_slownesses
+# del weights
+# del i
+# del j
+# del matrix
 
-procs[0].add_task(tasks[1])
-procs[0].add_task(tasks[5])
-procs[0].add_task(tasks[7])
-procs[0].add_task(tasks[10])
-procs[0].add_task(tasks[13])
-procs[1].add_task(tasks[3])
-procs[1].add_task(tasks[11])
-procs[1].add_task(tasks[14])
-procs[1].add_task(tasks[9])
-procs[2].add_task(tasks[0])
-procs[2].add_task(tasks[6])
-procs[3].add_task(tasks[2])
-procs[3].add_task(tasks[4])
-procs[3].add_task(tasks[8])
-procs[3].add_task(tasks[12])
-procs[3].add_task(tasks[15])
-del proc_slownesses
-del weights
-del i
-del j
-del matrix
+start_tasks = list(filter(lambda i: i.is_start_task, tasks))
+start_tasks.sort(key=lambda a: a.time, reverse=True)
+for proc, task in zip(sorted(procs, key=lambda a: a.slowness), start_tasks):
+    proc.add_task(task)
+
 while not all([task.is_finished for task in tasks]):
     for proc in procs:
         proc.step()
-    ...
+    tasks_to_do = list(filter(lambda i: i.can_be_added, tasks))
+    tasks_to_do.sort(key=lambda a: a.time, reverse=True)
+    for proc, task in zip(sort_procs(procs), tasks_to_do):
+        proc.add_task(task)
+
 
 for proc in procs:
     print(f'{proc.id}:' + '|'.join(proc.get_tray()))
-get_html([i.get_tray() for i in procs])
 
+get_html([i.get_tray() for i in procs])
